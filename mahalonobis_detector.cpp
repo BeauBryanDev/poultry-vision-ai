@@ -17,7 +17,12 @@ public:
     // Correccion Bessel: pasar de division N a division N-1
     int N = X.rows;
     covar = covar * (static_cast<float>(N) / (N - 1));
-
+    covar +=
+    cv::Mat::eye(
+        covar.rows,
+        covar.cols,
+        covar.type()
+    ) * 1e-6;
     cv::invert(covar, cov_inv, cv::DECOMP_SVD);
     
     // mu viene como fila de calcCovarMatrix, aseguramos shape correcto
@@ -27,8 +32,11 @@ public:
     float score(const cv::Mat& x) const {
         // OpenCV tiene una función nativa para Mahalanobis que devuelve la raíz cuadrada D
         // Elevamos al cuadrado para obtener el mismo resultado que en tu código Python (D^2)
-        cv::Mat x = x_input.reshape(1, 1);  // fuerza 1 x n_features
-        double dist = cv::Mahalanobis(x, mu, cov_inv);
+        cv::Mat x_reshaped = x.reshape(1, 1);  // fuerza 1 x n_features
+        double dist = cv::Mahalanobis(x_reshaped, mu, cov_inv);
         return static_cast<float>(dist * dist); 
     }
 };
+
+
+
