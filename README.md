@@ -1,6 +1,11 @@
 # PoultryVisionAI
 
+<div align="center">
+  <img src="chickend_and_hens.png" alt="Chickens and Hens" style="width:260px; border-radius:8px;">
+</div>
+
 ## Overview
+
 
 PoultryVisionAI is a computer vision system designed for automatic monitoring and behavioral analysis of poultry in commercial farming environments.
 
@@ -9,6 +14,7 @@ This project combines deep learning-based object detection with unsupervised ano
 The system is designed for overhead surveillance cameras installed inside poultry houses and focuses on real-time processing with a high-performance C++ backend.
 
 ---
+
 
 # Objectives
 
