@@ -1,63 +1,63 @@
 # PoultryVisionAI
 
 <div align="center">
-  <img src="chickend_and_hens.png" alt="Chickens and Hens" style="width:260px; border-radius:8px;">
+  <img src="./frontend/src/assets/poultry_shield.webp" alt="Chickens and Hens" style="width:160px; border-radius:8px;">
 </div>
 
 ## Overview
 
+PoultryVisionAI is a computer vision system for automatic monitoring and behavioral
+analysis of poultry in commercial farming environments.
 
-PoultryVisionAI is a computer vision system designed for automatic monitoring and behavioral analysis of poultry in commercial farming environments.
+The system combines deep-learning object detection with multi-object tracking and
+unsupervised anomaly detection to identify abnormal flock behavior — stress, panic
+events, predator presence, environmental disturbances, or other unexpected situations.
 
-This project combines deep learning-based object detection with unsupervised anomaly detection techniques to identify abnormal flock behavior that may indicate stress, panic events, predator presence, environmental disturbances, or other unexpected situations.
-
-The system is designed for overhead surveillance cameras installed inside poultry houses and focuses on real-time processing with a high-performance C++ backend.
+It targets overhead surveillance cameras installed inside poultry houses and is built
+for real-time processing with a Python inference backend and a reactive web dashboard.
 
 ---
 
+## Objectives
 
-# Objectives
-
-The main goals of PoultryVisionAI are:
-
-* Detect chickens under high-density farming conditions.
+* Detect chickens and hens under high-density farming conditions.
 * Track individual birds across video sequences.
-* Extract motion-based behavioral features.
-* Model normal flock behavior.
-* Detect abnormal events using statistical and machine learning techniques.
+* Extract motion-based behavioral features per bird.
+* Model normal flock behavior from historical footage.
+* Detect abnormal events using statistical and machine-learning techniques.
 * Provide an interactive web dashboard for monitoring and visualization.
 
 ---
 
-# Architecture
+## Architecture
 
 ```text
 Video Stream
       │
       ▼
-YOLOv11 Object Detector
+YOLOv11-S Object Detector  (fine-tuned, single class: chicken)
       │
       ▼
 Bounding Boxes
       │
       ▼
-Multi-Object Tracking
+Multi-Object Tracking  (ByteTrack / SORT)
       │
       ▼
 Trajectory Generation
       │
       ▼
-Feature Extraction
+Kinematic Feature Extraction
       │
-      ├──────────────► Mahalanobis Distance
+      ├──────────────► Mahalanobis Distance   (statistical)
       │
-      └──────────────► Isolation Forest
+      └──────────────► Isolation Forest        (machine learning)
                            │
                            ▼
                  Anomaly Detection Engine
                            │
                            ▼
-                 REST API / Backend Service
+                 FastAPI REST / WebSocket API
                            │
                            ▼
                   React Web Dashboard
@@ -65,40 +65,38 @@ Feature Extraction
 
 ---
 
-# Machine Learning Pipeline
+## Machine Learning Pipeline
 
-## Object Detection
+### Object Detection
 
-The detection module is based on YOLOv11-S and is specialized for a single object class:
+The detector is a **YOLOv11-S** model, fine-tuned for a single object class:
 
 ```
 Class 0: Chicken
 ```
 
-The detector has been trained using multiple datasets containing:
+It was trained on datasets containing broiler chickens, laying hens, roosters, and
+chicks across multiple colors, breeds, and viewpoints. A second domain-adaptation
+stage fine-tunes the detector on the PIO dataset (overhead imagery from commercial
+poultry facilities).
 
-* Broiler chickens
-* Laying hens
-* Roosters
-* Chicks
-* Different colors and breeds
-* Multiple viewpoints
+| Model            | Dataset                      | mAP    | Notes                         |
+|------------------|------------------------------|--------|-------------------------------|
+| `chicken_v1`     | Mixed chicken/hen imagery    | 0.925  | Baseline detector             |
+| `PIO_chicken_v2` | PIO overhead (domain adapt.) | 0.865  | Crowded broiler barns         |
 
-A second domain adaptation stage fine-tunes the detector using the PIO dataset, which contains overhead imagery captured from commercial poultry facilities.
+The trained weights are exported to ONNX (`./model/best.onnx`) and served through
+ONNX Runtime.
 
----
+### Multi-Object Tracking
 
-## Multi-Object Tracking
+Detections are associated across consecutive frames using a **ByteTrack / SORT**
+tracker to produce persistent trajectories. Each tracked bird receives a stable
+identifier that enables temporal behavior analysis.
 
-Detected birds are associated across consecutive frames using a tracking algorithm to generate persistent trajectories.
+### Kinematic Feature Extraction
 
-Each tracked individual receives a unique identifier that enables temporal behavior analysis.
-
----
-
-## Feature Extraction
-
-For every tracked bird, multiple motion descriptors can be extracted, including:
+For every tracked bird, the pipeline derives a motion feature vector:
 
 * Position
 * Velocity
@@ -110,125 +108,101 @@ For every tracked bird, multiple motion descriptors can be extracted, including:
 
 These features form the input space for anomaly detection.
 
----
+### Anomaly Detection — *pending training*
 
-## Mahalanobis Distance
+> **Status:** the detection model is trained; the two anomaly detectors below are still
+> to be fitted on Colab from real chicken/hen farm footage. Training will emit a config
+> JSON of fitted parameters (mean/covariance, thresholds, contamination) that is
+> committed to the repository and loaded by the backend at inference time.
 
-Mahalanobis Distance is used as a statistical measure to estimate how far an observation lies from the learned distribution of normal flock behavior.
+Two complementary detectors run in parallel over the same kinematic feature vector:
 
-The covariance matrix and mean vector are estimated from normal observations collected during training.
+* **Isolation Forest** — a machine-learning detector that isolates outliers via random
+  feature/split trees; the decision threshold is derived from a contamination percentile
+  at fit time.
+* **Mahalanobis Distance** — a statistical detector that fits a multivariate Gaussian to
+  normal flock behavior and flags observations far from the learned mean/covariance.
 
-This component is implemented directly in C++ using OpenCV linear algebra routines.
-
----
-
-## Isolation Forest
-
-An in-house implementation of Isolation Forest has been developed in modern C++ without relying on external machine learning frameworks.
-
-The implementation includes:
-
-* Random feature selection
-* Random split generation
-* Recursive isolation trees
-* Average path length computation
-* Contamination-based threshold estimation
-
-The resulting anomaly score complements the Mahalanobis Distance detector.
+Together they classify abnormal chicken and hen behavior on poultry farms.
 
 ---
 
-# Backend
+## Backend
 
-The backend is implemented entirely in modern C++ for maximum execution speed.
+The backend is implemented in **Python**, optimized for real-time inference.
 
-Main technologies:
+* Python
+* FastAPI — REST + WebSocket API
+* NumPy — numerical / feature computation and Mahalanobis statistics
+* OpenCV — frame decoding and image processing
+* ONNX Runtime — YOLOv11-S model inference
+* scikit-learn — Isolation Forest
+* PostgreSQL — persistence
 
-* C++
-* Crow Framework
-* OpenCV
-* ONNX Runtime
-* Docker
-* Docker Compose
+Responsibilities: model inference, tracking, feature extraction, anomaly detection,
+database interaction, and REST/WebSocket endpoints.
 
-The backend is responsible for:
-
-* Model inference
-* Tracking
-* Feature extraction
-* Anomaly detection
-* Database interaction
-* REST API endpoints
+> **Note:** an earlier C++/Crow backend was removed in favor of the Python stack to
+> keep training and serving in a single language.
 
 ---
 
-# Frontend
+## Frontend
 
-The web interface is developed using:
+The web dashboard is built with:
 
-* React
 * TypeScript
+* React
 * Vite
 * Tailwind CSS
-* Recharts
+* React Router
+* Zustand — state management
+* Axios — HTTP client
+* Recharts — data visualization
 
-The dashboard provides:
-
-* Live monitoring
-* Detection visualization
-* Behavioral statistics
-* Historical anomaly reports
-* Farm monitoring analytics
+The dashboard provides live monitoring, detection visualization, behavioral statistics,
+historical anomaly reports, and farm analytics.
 
 ---
 
-# Database
+## Database
 
-PostgreSQL is used to persist application data, including:
-
-* Camera metadata
-* Detection events
-* Tracking information
-* Anomaly records
-* System logs
+**PostgreSQL** persists application data: camera metadata, detection events, tracking
+information, anomaly records, and system logs.
 
 ---
 
-# Deployment
+## Deployment
 
-The project is containerized using Docker and orchestrated through Docker Compose.
-
-The architecture is designed for deployment on Linux servers equipped with GPU acceleration.
-
----
-
-# Main Technologies
-
-* C++20
-* Crow
-* OpenCV
-* ONNX Runtime
-* PostgreSQL
-* Docker
-* Docker Compose
-* React
-* TypeScript
-* Tailwind CSS
-* Recharts
-* YOLOv11
+The project is containerized with Docker and orchestrated via Docker Compose, targeting
+Linux servers with GPU acceleration.
 
 ---
 
-# Research Focus
+## Technology Summary
 
-PoultryVisionAI explores the integration of computer vision and unsupervised machine learning for precision livestock farming.
-
-Rather than relying solely on object detection, the project aims to model flock dynamics and automatically identify behavioral anomalies through statistical and machine learning methods.
+| Layer      | Technologies                                                        |
+|------------|---------------------------------------------------------------------|
+| Detection  | YOLOv11-S (fine-tuned), ONNX Runtime                                 |
+| Tracking   | ByteTrack / SORT                                                     |
+| Anomaly    | Isolation Forest (scikit-learn), Mahalanobis Distance (NumPy)        |
+| Backend    | Python, FastAPI, NumPy, OpenCV, ONNX Runtime                         |
+| Frontend   | TypeScript, React, Vite, Tailwind CSS, Zustand, Axios, Recharts      |
+| Database   | PostgreSQL                                                           |
+| Infra      | Docker, Docker Compose                                               |
 
 ---
 
-# License
+## Research Focus
 
-This project is intended for research, educational, and precision agriculture applications.
+PoultryVisionAI explores the integration of computer vision and unsupervised machine
+learning for precision livestock farming. Rather than relying on object detection alone,
+the project models flock dynamics and automatically identifies behavioral anomalies
+through statistical and machine-learning methods.
 
-Please refer to the project license for usage and distribution terms.
+---
+
+## License
+
+This project is intended for research, educational, and precision-agriculture
+applications. Refer to the project license for usage and distribution terms.
